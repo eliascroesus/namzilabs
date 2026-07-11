@@ -16,15 +16,22 @@ few minutes.
    npm run db:studio    # optional: browse the data
    ```
 
-## 2. Google OAuth (sign-in)
+## 2. Google OAuth (Sheets connector) + login password
+
+Login currently uses a shared password (`APP_PASSWORD`, defaults to `Namzilabs123` if unset —
+set your own). Google OAuth is used by the **Google Sheets integration**, and the public
+homepage /terms /privacy pages exist to satisfy Google's OAuth verification requirements.
 
 Using the existing Google Cloud OAuth client for namzilabs.co:
 
 1. In Google Cloud Console → APIs & Services → Credentials → your OAuth client, add **Authorized redirect URIs**:
-   - `https://namzilabs.co/api/auth/callback/google`
-   - `http://localhost:3000/api/auth/callback/google` (local dev)
-2. Copy the client ID/secret → `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`.
-3. Generate `AUTH_SECRET` and `ENCRYPTION_KEY`:
+   - `https://namzilabs.co/api/oauth/google/callback` (Sheets connector)
+   - `http://localhost:3000/api/oauth/google/callback` (local dev)
+   - `https://namzilabs.co/api/auth/callback/google` (Google sign-in, for when it returns)
+2. In APIs & Services → Library, **enable the Google Sheets API and the Google Drive API** for the project — the Sheets connector calls both.
+3. On the OAuth consent screen, add scopes `spreadsheets.readonly` and `drive.metadata.readonly`, set the homepage to `https://namzilabs.co`, privacy policy to `https://namzilabs.co/privacy`, and terms to `https://namzilabs.co/terms`.
+4. Copy the client ID/secret → `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`.
+5. Generate `AUTH_SECRET` and `ENCRYPTION_KEY`:
    ```bash
    openssl rand -base64 32   # run twice, one value for each
    ```
@@ -32,7 +39,7 @@ Using the existing Google Cloud OAuth client for namzilabs.co:
 ## 3. Vercel (hosting)
 
 1. In Vercel, **Add New → Project** → import `eliascroesus/namzilabs` (framework auto-detects Next.js; no custom settings needed).
-2. Project → Settings → Environment Variables: add `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ENCRYPTION_KEY` (Production + Preview).
+2. Project → Settings → Environment Variables: add `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ENCRYPTION_KEY`, `APP_PASSWORD` (Production + Preview).
 3. Project → Settings → Domains: add `namzilabs.co` and follow the DNS instructions shown (A record / nameservers at your registrar).
 4. Production deploys track `main`; every PR gets a preview URL automatically.
 

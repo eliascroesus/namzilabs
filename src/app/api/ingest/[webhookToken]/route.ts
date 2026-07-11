@@ -22,7 +22,9 @@ export async function POST(
     .select()
     .from(schema.connections)
     .where(eq(schema.connections.webhookToken, webhookToken));
-  if (!conn) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!conn || conn.status === "deleted") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // Paused connections acknowledge and drop — no ingestion while paused.
   if (conn.status === "paused") return NextResponse.json({ ok: true, ignored: true });
