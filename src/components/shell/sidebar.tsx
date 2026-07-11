@@ -6,7 +6,7 @@ import { GaugeIcon, PlugIcon, SettingsIcon, SigmaIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/", label: "Dashboard", icon: GaugeIcon },
+  { href: "/dashboard", label: "Dashboard", icon: GaugeIcon },
   { href: "/integrations", label: "Integrations", icon: PlugIcon },
   { href: "/metrics", label: "Metrics", icon: SigmaIcon },
   { href: "/settings", label: "Settings", icon: SettingsIcon },
@@ -24,7 +24,7 @@ export function Sidebar() {
       </div>
       <nav className="flex flex-1 flex-col gap-1 p-3">
         {NAV.map(({ href, label, icon: Icon }) => {
-          const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+          const active = pathname.startsWith(href);
           return (
             <Link
               key={href}

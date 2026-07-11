@@ -124,6 +124,7 @@ export const connections = pgTable(
     externalWebhookId: text("external_webhook_id"),
     lastEventAt: timestamp("last_event_at", { mode: "date" }),
     errorMessage: text("error_message"),
+    rejectedCount: integer("rejected_count").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (t) => [index("connections_workspace_idx").on(t.workspaceId)],
