@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    env:
+      # Dummy values so `next build` can evaluate server modules.
+      # Nothing connects to these at build time.
+      DATABASE_URL: postgres://ci:ci@ci.invalid/ci
+      AUTH_SECRET: ci-dummy-secret
+      AUTH_GOOGLE_ID: ci-dummy-id
+      AUTH_GOOGLE_SECRET: ci-dummy-secret
+      ENCRYPTION_KEY: ci-dummy-encryption-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
