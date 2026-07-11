@@ -31,8 +31,18 @@ export default async function LoginPage({
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input id="password" name="password" type="password" autoFocus required />
-              {error ? (
+              {error === "password" || error === "1" ? (
                 <p className="text-sm text-destructive">Wrong password. Try again.</p>
+              ) : null}
+              {error === "server" ? (
+                <p className="text-sm text-destructive">
+                  Sign-in failed on the server — this is not your password. Usually the database
+                  isn&apos;t reachable or migrations haven&apos;t run. Check{" "}
+                  <a href="/api/health" className="underline">
+                    /api/health
+                  </a>{" "}
+                  and the deployment logs.
+                </p>
               ) : null}
             </div>
             <Button type="submit" className="w-full" size="lg">
