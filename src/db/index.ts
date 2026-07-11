@@ -17,4 +17,9 @@ export function db(): NeonHttpDatabase<typeof schema> {
   return cached;
 }
 
+/** Test seam: lets vitest swap in a PGlite-backed drizzle instance. */
+export function setDbForTests(instance: NeonHttpDatabase<typeof schema>) {
+  cached = instance;
+}
+
 export { schema };

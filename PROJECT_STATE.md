@@ -6,7 +6,12 @@
 - Graphify: managed by GitHub Actions
 - Domain to preserve later: namzilabs.co
 - Google OAuth/domain setup to preserve later: namzilabs.co
-- Current status: Plan 1 (foundation) CODE COMPLETE — Next.js 15 app scaffolded with schema, auth, Inngest spine, app shell; lint/typecheck/tests/build all green. NOT yet provisioned: Neon DB, Vercel project, Inngest integration, Google OAuth redirect URIs — manual steps in docs/SETUP.md. Next step: owner runs docs/SETUP.md, verifies Plan 1 acceptance on production, then execute Plan 2 (docs/plans/02-integration-engine.md).
+- Current status: Plan 2 (integration engine) CODE COMPLETE — connector framework, ingestion pipeline (webhook intake + Inngest processor/reprocess/5-min poll), six connectors (webhook, Calendly, Brevo, Close, Google Sheets w/ per-connection OAuth, Instantly), Integrations UI (catalog, connect wizard with live sample preview, detail page with sparkline/health/reprocess/pause/soft-delete). 41 tests green incl. PGlite DB-level idempotency tests. Also: public homepage + /terms + /privacy (Google OAuth verification requirements incl. Limited Use disclosure) and a shared-password login wall (APP_PASSWORD, default Namzilabs123) replacing Google sign-in until the consent screen is verified.
+- Known deferrals / decisions
+  - Instantly polling fallback (for plans without webhooks) NOT implemented — per-event API endpoints could not be verified from the build environment; webhook path is complete. Do not invent endpoints; verify docs first.
+  - Connection delete is a soft delete (status 'deleted'): historical events remain for metrics; credentials wiped; ingest URL 404s.
+  - Google Sheets ingestion is polling-only (5-min Inngest cron) with content-fingerprint row identity; on connect the current rows are snapshotted so history doesn't flood in.
+  - Provisioning still manual: docs/SETUP.md (Neon, Vercel env incl. APP_PASSWORD, Inngest integration, Google Cloud: enable Sheets+Drive APIs, add /api/oauth/google/callback redirect URI, consent-screen URLs).
 - Build plan
   - Overview + locked stack decisions + verified platform constraints: docs/BUILD_PLAN.md
   - Plan 1 (foundation: Next.js/Neon/Auth.js/Inngest/app shell): docs/plans/01-foundation.md

@@ -1,0 +1,1 @@
+ALTER TABLE "connections" ADD COLUMN "rejected_count" integer DEFAULT 0 NOT NULL;

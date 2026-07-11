@@ -8,6 +8,13 @@
       "when": 1783788605390,
       "tag": "0000_living_white_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783790784221,
+      "tag": "0001_panoramic_quentin_quire",
+      "breakpoints": true
     }
   ]
 }

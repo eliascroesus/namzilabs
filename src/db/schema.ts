@@ -101,7 +101,9 @@ export const workspaceMembers = pgTable(
 export const PROVIDERS = ["calendly", "brevo", "instantly", "close", "google_sheets", "webhook"] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
-export const CONNECTION_STATUSES = ["active", "error", "paused", "pending"] as const;
+// "deleted" is a soft state: the row (and its historical events) survive,
+// ingestion stops, and the UI hides it. Text column — no DB migration needed.
+export const CONNECTION_STATUSES = ["active", "error", "paused", "pending", "deleted"] as const;
 export type ConnectionStatus = (typeof CONNECTION_STATUSES)[number];
 
 export const connections = pgTable(
@@ -124,6 +126,7 @@ export const connections = pgTable(
     externalWebhookId: text("external_webhook_id"),
     lastEventAt: timestamp("last_event_at", { mode: "date" }),
     errorMessage: text("error_message"),
+    rejectedCount: integer("rejected_count").notNull().default(0),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (t) => [index("connections_workspace_idx").on(t.workspaceId)],
