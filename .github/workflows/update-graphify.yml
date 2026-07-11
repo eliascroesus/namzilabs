@@ -1,0 +1,37 @@
+name: Update Graphify
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "graphify-out/**"
+
+permissions:
+  contents: write
+
+jobs:
+  update-graphify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Run Graphify
+        run: |
+          uvx --from graphifyy graphify .
+          uvx --from graphifyy graphify install --project || true
+          uvx --from graphifyy graphify install --project --platform codex || true
+
+      - name: Commit Graphify output
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Update Graphify map"
+          file_pattern: "graphify-out .claude/skills/graphify .agents/skills/graphify"
