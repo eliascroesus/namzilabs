@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { deleteConnection, pauseConnection, reprocessConnection } from "../actions";
+import { deleteConnection, pauseConnection, reprocessConnection, syncConnection } from "../actions";
 
 export function ConnectionActions({
   connectionId,
@@ -33,6 +33,14 @@ export function ConnectionActions({
 
   return (
     <div className="flex flex-wrap gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={busy}
+        onClick={() => run(() => syncConnection(connectionId), "Sync queued — fresh data lands within a minute.")}
+      >
+        Sync now
+      </Button>
       {hasFailures || status === "error" ? (
         <Button
           variant="outline"

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, lt } from "drizzle-orm";
 import { inngest } from "@/inngest/client";
 import { db, schema } from "@/db";
 import { getConnector, POLLING_PROVIDERS } from "@/connectors";
@@ -69,7 +69,34 @@ export const pollCronFn = inngest.createFunction(
         })),
       );
     }
-    return { polled: targets.length };
+
+    // Safety net: re-drive raw events stuck in 'pending' (e.g. the webhook
+    // stored the payload but the queue send failed). Nothing is ever lost.
+    const stalePending = await step.run("find-stale-pending", async () => {
+      const cutoff = new Date(Date.now() - 10 * 60 * 1000);
+      const rows = await db()
+        .select({ id: schema.rawEvents.id, connectionId: schema.rawEvents.connectionId })
+        .from(schema.rawEvents)
+        .where(
+          and(
+            eq(schema.rawEvents.status, "pending"),
+            lt(schema.rawEvents.receivedAt, cutoff),
+          ),
+        )
+        .limit(100);
+      return rows;
+    });
+    if (stalePending.length > 0) {
+      await step.sendEvent(
+        "sweep-pending",
+        stalePending.map((r) => ({
+          name: "ingest/raw_event.received" as const,
+          data: { rawEventId: r.id, connectionId: r.connectionId },
+        })),
+      );
+    }
+
+    return { polled: targets.length, sweptPending: stalePending.length };
   },
 );
 

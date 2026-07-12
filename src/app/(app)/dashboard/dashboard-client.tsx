@@ -12,6 +12,7 @@ import {
   CircleIcon,
   GripVerticalIcon,
   PlusIcon,
+  RefreshCwIcon,
   TargetIcon,
   XIcon,
 } from "lucide-react";
@@ -65,18 +66,22 @@ type Preset = (typeof PRESETS)[number];
 function rangeFor(preset: Preset, custom: { from: string; to: string }): { from: Date; to: Date } {
   const now = new Date();
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // Ranges end at END of the current day, not the instant the preset was
+  // picked — otherwise the 30s live refresh could never show new events
+  // (the range would be frozen in the past) and SWR keys stay stable.
+  const endOfDay = new Date(startOfDay.getTime() + 86_400_000);
   switch (preset) {
     case "Today":
-      return { from: startOfDay, to: now };
+      return { from: startOfDay, to: endOfDay };
     case "7d":
-      return { from: new Date(now.getTime() - 7 * 86_400_000), to: now };
+      return { from: new Date(startOfDay.getTime() - 6 * 86_400_000), to: endOfDay };
     case "30d":
-      return { from: new Date(now.getTime() - 30 * 86_400_000), to: now };
+      return { from: new Date(startOfDay.getTime() - 29 * 86_400_000), to: endOfDay };
     case "This month":
-      return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now };
+      return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: endOfDay };
     case "Custom": {
-      const from = custom.from ? new Date(`${custom.from}T00:00:00`) : new Date(now.getTime() - 7 * 86_400_000);
-      const to = custom.to ? new Date(`${custom.to}T23:59:59`) : now;
+      const from = custom.from ? new Date(`${custom.from}T00:00:00`) : new Date(startOfDay.getTime() - 6 * 86_400_000);
+      const to = custom.to ? new Date(`${custom.to}T23:59:59`) : endOfDay;
       return { from, to };
     }
   }
@@ -131,6 +136,7 @@ export function DashboardClient({
   const [compare, setCompare] = React.useState(true);
   const [updatedAt, setUpdatedAt] = React.useState<Date | null>(null);
   const [dragId, setDragId] = React.useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = React.useState(0);
 
   const range = React.useMemo(() => rangeFor(preset, custom), [preset, custom]);
 
@@ -154,7 +160,15 @@ export function DashboardClient({
             ? `Updated ${updatedAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}`
             : "Live metrics from every tool you connect, in one place."
         }
-        action={<AddWidgetDialog metrics={metrics} onAdded={() => router.refresh()} />}
+        action={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setRefreshNonce((n) => n + 1)} aria-label="Refresh all widgets">
+              <RefreshCwIcon />
+              Refresh
+            </Button>
+            <AddWidgetDialog metrics={metrics} onAdded={() => router.refresh()} />
+          </div>
+        }
       />
 
       {/* Global controls */}
@@ -194,6 +208,7 @@ export function DashboardClient({
                 widget={w}
                 range={range}
                 compare={compare}
+                refreshNonce={refreshNonce}
                 onLoaded={() => setUpdatedAt(new Date())}
                 onChanged={() => router.refresh()}
               />
@@ -249,12 +264,14 @@ function WidgetCard({
   widget,
   range,
   compare,
+  refreshNonce,
   onLoaded,
   onChanged,
 }: {
   widget: Widget;
   range: { from: Date; to: Date };
   compare: boolean;
+  refreshNonce: number;
   onLoaded: () => void;
   onChanged: () => void;
 }) {
@@ -264,6 +281,7 @@ function WidgetCard({
     to: range.to.toISOString(),
     compare: compare && widget.widgetType === "number",
     includeEvents: widget.widgetType === "table",
+    _r: refreshNonce,
   });
   const { data, error, isLoading } = useSWR<RunResponse>(key, runFetcher, {
     refreshInterval: 30_000,

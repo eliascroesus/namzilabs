@@ -38,6 +38,7 @@ export const closeConnector: Connector = {
   label: "Close CRM",
   description: "Track new leads, opportunity changes, and logged calls, SMS, and emails.",
   credentialsHelpUrl: "https://app.close.com/settings/developer/api-keys/",
+  producedEventTypes: ["lead_created", "opportunity_created", "opportunity_status_changed", "call_logged", "sms_sent", "sms_received", "email_sent", "email_received"],
 
   async testConnection(auth) {
     try {

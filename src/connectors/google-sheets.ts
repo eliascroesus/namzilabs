@@ -70,6 +70,7 @@ export const googleSheetsConnector: Connector = {
   authMethod: "oauth",
   label: "Google Sheets",
   description: "Turn every new spreadsheet row into a trackable event.",
+  producedEventTypes: ["row_added"],
 
   async testConnection(auth) {
     try {

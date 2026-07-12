@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CheckIcon, PlusIcon, XIcon } from "lucide-react";
@@ -22,6 +23,7 @@ import {
   type EventTypeOption,
 } from "./actions";
 import { addWidget } from "../dashboard/actions";
+import { RecordInspector } from "./record-inspector";
 
 const AGG_CARDS = [
   { value: "count", title: "Count", hint: "How many times this happened" },
@@ -175,39 +177,51 @@ export function MetricBuilder({
           <h2 className="font-medium">1. What do you want to measure?</h2>
           {groups.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No events yet — connect a tool first, then come back here.
+              No tools connected yet —{" "}
+              <Link href="/integrations" className="underline">
+                connect your first tool
+              </Link>
+              , then come back here.
             </p>
           ) : (
-            groups.map((group) => (
-              <div key={group.name} className="space-y-2">
-                <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                  <ProviderTile provider={group.provider as Provider} size="sm" />
-                  {group.name}
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {group.items.map((opt) => {
-                    const selected = eventTypes.includes(opt.eventType);
-                    return (
-                      <button
-                        key={`${opt.connectionId}-${opt.eventType}`}
-                        type="button"
-                        onClick={() => toggleEventType(opt.eventType)}
-                        className={cn(
-                          "flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 text-left text-sm transition-colors",
-                          selected ? "border-primary ring-1 ring-primary" : "hover:bg-secondary",
-                        )}
-                      >
-                        <span>
-                          <span className="font-medium">{opt.label}</span>
-                          <span className="block text-xs text-muted-foreground">{opt.count} events</span>
-                        </span>
-                        {selected ? <CheckIcon className="size-4 text-primary" /> : null}
-                      </button>
-                    );
-                  })}
+            groups.map((group) => {
+              const connectionId = group.items[0]?.connectionId;
+              return (
+                <div key={group.name} className="space-y-2">
+                  <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <ProviderTile provider={group.provider as Provider} size="sm" />
+                    {group.name}
+                    {connectionId ? (
+                      <RecordInspector connectionId={connectionId} connectionName={group.name} />
+                    ) : null}
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {group.items.map((opt) => {
+                      const selected = eventTypes.includes(opt.eventType);
+                      return (
+                        <button
+                          key={`${opt.connectionId}-${opt.eventType}`}
+                          type="button"
+                          onClick={() => toggleEventType(opt.eventType)}
+                          className={cn(
+                            "flex items-center justify-between rounded-lg border bg-card px-3 py-2.5 text-left text-sm transition-colors",
+                            selected ? "border-primary ring-1 ring-primary" : "hover:bg-secondary",
+                          )}
+                        >
+                          <span>
+                            <span className="font-medium">{opt.label}</span>
+                            <span className="block text-xs text-muted-foreground">
+                              {opt.count > 0 ? `${opt.count} events` : "no events yet — counts once data arrives"}
+                            </span>
+                          </span>
+                          {selected ? <CheckIcon className="size-4 text-primary" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </section>
 

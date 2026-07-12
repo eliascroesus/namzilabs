@@ -351,6 +351,51 @@ export async function reprocessConnection(connectionId: string): Promise<ActionR
   return { ok: true, data: undefined };
 }
 
+/**
+ * Manual "Sync now": polls immediately (for polling-mode connections) and
+ * reprocesses anything stuck — no waiting for the 5-minute cron.
+ */
+export async function syncConnection(connectionId: string): Promise<ActionResult> {
+  const conn = await ownedConnection(connectionId);
+  const connector = getConnector(conn.provider);
+  const events: { name: string; data: Record<string, string> }[] = [
+    { name: "ingest/reprocess.requested", data: { connectionId: conn.id } },
+  ];
+  if (connector.poll && !(connector.registerWebhook && conn.externalWebhookId)) {
+    events.push({ name: "ingest/poll.connection", data: { connectionId: conn.id } });
+  }
+  await inngest.send(events);
+  return { ok: true, data: undefined };
+}
+
+/** Sync every active connection in the workspace at once. */
+export async function syncAllConnections(): Promise<ActionResult<{ synced: number }>> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Not signed in" };
+  const workspace = await getWorkspaceForUser(session.user.id);
+  if (!workspace) return { ok: false, error: "No workspace" };
+
+  const conns = await db()
+    .select()
+    .from(schema.connections)
+    .where(
+      and(
+        eq(schema.connections.workspaceId, workspace.id),
+        eq(schema.connections.status, "active"),
+      ),
+    );
+  const events: { name: string; data: Record<string, string> }[] = [];
+  for (const conn of conns) {
+    const connector = getConnector(conn.provider);
+    events.push({ name: "ingest/reprocess.requested", data: { connectionId: conn.id } });
+    if (connector.poll && !(connector.registerWebhook && conn.externalWebhookId)) {
+      events.push({ name: "ingest/poll.connection", data: { connectionId: conn.id } });
+    }
+  }
+  if (events.length > 0) await inngest.send(events);
+  return { ok: true, data: { synced: conns.length } };
+}
+
 /** Live check used by the webhook wizard's "waiting for first request" step. */
 export async function countRawEvents(connectionId: string): Promise<ActionResult<number>> {
   const conn = await ownedConnection(connectionId);

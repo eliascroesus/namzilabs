@@ -1,8 +1,12 @@
+import { and, desc, eq, ne } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { db, schema } from "@/db";
 import { ensurePersonalWorkspace, getWorkspaceForUser } from "@/lib/workspace";
-import { Sidebar } from "@/components/shell/sidebar";
+import { Sidebar, type SidebarSource } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
+
+const QUIET_AFTER_MS = 48 * 60 * 60 * 1000;
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -17,10 +21,37 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   if (!workspace) redirect("/login");
 
+  const connections = await db()
+    .select({
+      id: schema.connections.id,
+      name: schema.connections.name,
+      provider: schema.connections.provider,
+      status: schema.connections.status,
+      lastEventAt: schema.connections.lastEventAt,
+    })
+    .from(schema.connections)
+    .where(
+      and(
+        eq(schema.connections.workspaceId, workspace.id),
+        ne(schema.connections.status, "deleted"),
+      ),
+    )
+    .orderBy(desc(schema.connections.createdAt));
+
+  const sources: SidebarSource[] = connections.map((c) => ({
+    id: c.id,
+    name: c.name,
+    provider: c.provider,
+    status: c.status,
+    quiet:
+      c.status === "active" &&
+      (!c.lastEventAt || Date.now() - c.lastEventAt.getTime() > QUIET_AFTER_MS),
+  }));
+
   return (
     <div className="min-h-screen">
-      <Sidebar />
-      <div className="md:pl-56">
+      <Sidebar sources={sources} />
+      <div className="md:pl-60">
         <Topbar
           workspaceName={workspace.name}
           userName={user.name ?? null}

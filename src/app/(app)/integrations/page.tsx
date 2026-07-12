@@ -10,6 +10,7 @@ import { ProviderTile } from "@/components/shared/provider-tile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SyncAllButton } from "./sync-all-button";
 
 export const metadata = { title: "Integrations" };
 
@@ -44,6 +45,7 @@ export default async function IntegrationsPage() {
       <PageHeader
         title="Integrations"
         description="Connect a tool and its data starts flowing in under a minute."
+        action={connections.length > 0 ? <SyncAllButton /> : undefined}
       />
 
       {connections.length > 0 ? (
