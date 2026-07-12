@@ -32,5 +32,9 @@ export const ALL_CONNECTORS: Connector[] = [
   instantlyConnector,
 ];
 
-/** Providers ingested by the 5-minute poll cron. */
-export const POLLING_PROVIDERS: Provider[] = ["google_sheets"];
+/**
+ * Providers the 5-minute poll cron considers. Connections with a live
+ * webhook registration are skipped at poll time — polling is the fallback,
+ * webhooks are the primary.
+ */
+export const POLLING_PROVIDERS: Provider[] = ["google_sheets", "instantly"];

@@ -11,8 +11,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { eq } from "drizzle-orm";
+import { db, schema } from "@/db";
 import { signOutAction } from "@/lib/actions";
 import { DemoJobButton } from "./demo-job-button";
+import { TimezoneSelect } from "./timezone-select";
 
 export const metadata = { title: "Settings" };
 
@@ -21,6 +24,12 @@ export default async function SettingsPage() {
   const user = session?.user;
   if (!user?.id) redirect("/login");
   const workspace = await getWorkspaceForUser(user.id);
+  const [wsRow] = workspace
+    ? await db()
+        .select({ timezone: schema.workspaces.timezone })
+        .from(schema.workspaces)
+        .where(eq(schema.workspaces.id, workspace.id))
+    : [];
 
   return (
     <>
@@ -39,6 +48,10 @@ export default async function SettingsPage() {
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Your role</span>
               <Badge variant="secondary">{workspace?.role}</Badge>
+            </div>
+            <div className="space-y-1.5 pt-1">
+              <span className="text-muted-foreground">Timezone (metric bucketing)</span>
+              <TimezoneSelect current={wsRow?.timezone ?? "UTC"} />
             </div>
           </CardContent>
         </Card>

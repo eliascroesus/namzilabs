@@ -237,33 +237,52 @@ export async function fetchSampleAction(
 export async function finalizeConnection(
   connectionId: string,
   name: string,
-): Promise<ActionResult<{ connectionId: string }>> {
+): Promise<ActionResult<{ connectionId: string; notice?: string }>> {
   const conn = await ownedConnection(connectionId);
   const trimmed = name.trim().slice(0, 80);
   if (!trimmed) return { ok: false, error: "Give this connection a name." };
 
   const connector = getConnector(conn.provider);
+  let webhookRegistered = Boolean(conn.externalWebhookId);
+  let notice: string | undefined;
 
   try {
     if (connector.registerWebhook && !conn.externalWebhookId) {
       const authData = await getFreshAuth(conn);
       const base = await getBaseUrl();
       const callbackUrl = `${base}/api/ingest/${conn.webhookToken}`;
-      const { externalId, secret } = await connector.registerWebhook(
-        authData,
-        conn.config,
-        callbackUrl,
-      );
-      const merged = { ...authData, ...(secret ? { webhookSecret: secret } : {}) };
-      await db()
-        .update(schema.connections)
-        .set({ externalWebhookId: externalId, authData: encryptJson(merged) })
-        .where(eq(schema.connections.id, conn.id));
+      try {
+        const { externalId, secret } = await connector.registerWebhook(
+          authData,
+          conn.config,
+          callbackUrl,
+        );
+        const merged = { ...authData, ...(secret ? { webhookSecret: secret } : {}) };
+        await db()
+          .update(schema.connections)
+          .set({ externalWebhookId: externalId, authData: encryptJson(merged) })
+          .where(eq(schema.connections.id, conn.id));
+        webhookRegistered = true;
+      } catch (err) {
+        // Instantly restricts webhooks to Hypergrowth+ — fall back to the
+        // documented daily-analytics polling instead of blocking setup.
+        if (conn.provider === "instantly" && connector.poll) {
+          await db()
+            .update(schema.connections)
+            .set({ config: { ...conn.config, webhookUnavailable: true } })
+            .where(eq(schema.connections.id, conn.id));
+          notice =
+            "This Instantly plan doesn't allow webhooks, so data arrives as daily rollups (previous day) instead of real-time events.";
+        } else {
+          throw err;
+        }
+      }
     }
 
     // Polling providers: snapshot the current state so history doesn't flood
-    // in as "new" events — only rows added after connect count.
-    if (connector.poll) {
+    // in as "new" events — only activity after connect counts. Skipped when
+    // a live webhook covers ingestion.
+    if (connector.poll && !webhookRegistered) {
       const authData = await getFreshAuth(conn);
       const { nextCursor } = await connector.poll(authData, conn.config, {});
       await db()
@@ -281,7 +300,7 @@ export async function finalizeConnection(
       .where(eq(schema.connections.id, conn.id));
 
     revalidatePath("/integrations");
-    return { ok: true, data: { connectionId: conn.id } };
+    return { ok: true, data: { connectionId: conn.id, notice } };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Could not finish setup" };
   }

@@ -15,6 +15,13 @@
       "when": 1783790784221,
       "tag": "0001_panoramic_quentin_quire",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783850634612,
+      "tag": "0002_brown_swordsman",
+      "breakpoints": true
     }
   ]
 }

@@ -104,6 +104,10 @@ export const pollConnectionFn = inngest.createFunction(
 
       const connector = getConnector(conn.provider);
       if (!connector.poll) return [] as string[];
+      // Webhooks are the primary path; polling only covers connections
+      // where webhook registration wasn't possible (e.g. Instantly plans
+      // below Hypergrowth).
+      if (connector.registerWebhook && conn.externalWebhookId) return [] as string[];
 
       const { getFreshAuth } = await import("@/lib/connection-auth");
       const auth = await getFreshAuth(conn);
