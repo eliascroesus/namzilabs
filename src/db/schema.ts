@@ -75,6 +75,8 @@ export const workspaces = pgTable("workspaces", {
   id: id(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  /** IANA zone for metric bucketing (events are stored UTC). */
+  timezone: text("timezone").notNull().default("UTC"),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
 });
 
