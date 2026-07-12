@@ -31,6 +31,23 @@ export async function GET(request: NextRequest) {
     return back("/integrations?oauth_error=connection");
   }
 
+  // Defense in depth on top of the nonce cookie: the signed-in user must
+  // belong to the connection's workspace before tokens are stored on it.
+  const { auth } = await import("@/auth");
+  const session = await auth();
+  if (!session?.user?.id) return back("/login");
+  const { and } = await import("drizzle-orm");
+  const [membership] = await db()
+    .select({ id: schema.workspaceMembers.id })
+    .from(schema.workspaceMembers)
+    .where(
+      and(
+        eq(schema.workspaceMembers.workspaceId, conn.workspaceId),
+        eq(schema.workspaceMembers.userId, session.user.id),
+      ),
+    );
+  if (!membership) return back("/integrations?oauth_error=connection");
+
   try {
     const proto = request.headers.get("x-forwarded-proto") ?? "https";
     const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");

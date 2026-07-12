@@ -43,6 +43,7 @@ export const webhookConnector: Connector = {
   label: "Webhook",
   description: "Receive events from any tool that can send an HTTP webhook.",
   producedEventTypes: [], // derived from config.eventType at read time
+  metadataFields: [], // top-level payload scalars, sampled from real data
 
   async testConnection() {
     return { ok: true };

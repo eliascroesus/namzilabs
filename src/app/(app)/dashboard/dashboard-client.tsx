@@ -174,7 +174,13 @@ export function DashboardClient({
       {/* Global controls */}
       <div className="mb-6 flex flex-wrap items-center gap-2">
         {PRESETS.map((p) => (
-          <Button key={p} variant={preset === p ? "default" : "outline"} size="sm" onClick={() => setPreset(p)}>
+          <Button
+            key={p}
+            variant={preset === p ? "default" : "outline"}
+            size="sm"
+            className="rounded-full"
+            onClick={() => setPreset(p)}
+          >
             {p}
           </Button>
         ))}
@@ -364,7 +370,7 @@ function NumberBody({
           <span
             className={cn(
               "flex items-center gap-0.5 text-xs font-medium",
-              delta >= 0 ? "text-emerald-700" : "text-destructive",
+              delta >= 0 ? "text-emerald-400" : "text-destructive",
             )}
           >
             {delta >= 0 ? <ArrowUpIcon className="size-3" /> : <ArrowDownIcon className="size-3" />}
@@ -383,7 +389,7 @@ function NumberBody({
           </div>
           <p className="text-xs text-muted-foreground">
             {formatValue(goalValue, data.format)} of {formatValue(goal.target, data.format)} this {goal.period} ·{" "}
-            <span className={pace.onPace ? "text-emerald-700" : "text-amber-700"}>
+            <span className={pace.onPace ? "text-emerald-400" : "text-amber-400"}>
               {pace.onPace ? "on pace" : "behind pace"}
             </span>
           </p>

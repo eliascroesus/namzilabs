@@ -11,9 +11,19 @@ export const filterSchema = z.object({
   field: z.union([
     z.literal("contact_email"),
     z.literal("provider"),
+    z.literal("amount"),
     z.string().regex(/^metadata\.[a-zA-Z0-9_. -]{1,80}$/),
   ]),
-  op: z.enum(["equals", "not_equals", "contains", "exists", "gt", "lt"]),
+  op: z.enum([
+    "equals",
+    "not_equals",
+    "contains",
+    "not_contains",
+    "starts_with",
+    "exists",
+    "gt",
+    "lt",
+  ]),
   value: z.union([z.string().max(500), z.number()]).optional(),
 });
 export type Filter = z.infer<typeof filterSchema>;

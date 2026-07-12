@@ -50,11 +50,18 @@ describe("calendly connector", () => {
     expect(calendlyConnector.verifyRequest!({ headers, rawBody: body }, conn)).toBe(false);
   });
 
-  it("rejects a stale timestamp (replay)", () => {
+  it("rejects a stale timestamp (past the 24h retry window)", () => {
     const body = JSON.stringify(inviteeCreated);
-    const stale = Math.floor(Date.now() / 1000) - 2 * 60 * 60;
+    const stale = Math.floor(Date.now() / 1000) - 25 * 60 * 60;
     const headers = new Headers({ "Calendly-Webhook-Signature": sign(body, "shh-signing-key", stale) });
     expect(calendlyConnector.verifyRequest!({ headers, rawBody: body }, conn)).toBe(false);
+  });
+
+  it("accepts a delayed retry within the 24h window", () => {
+    const body = JSON.stringify(inviteeCreated);
+    const delayed = Math.floor(Date.now() / 1000) - 6 * 60 * 60;
+    const headers = new Headers({ "Calendly-Webhook-Signature": sign(body, "shh-signing-key", delayed) });
+    expect(calendlyConnector.verifyRequest!({ headers, rawBody: body }, conn)).toBe(true);
   });
 
   it("rejects when no signature header is present", () => {

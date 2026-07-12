@@ -44,18 +44,30 @@ function aggregateSql(agg: EventMetricDefinition["aggregation"]): SQL {
   }
 }
 
+const NUMERIC_RE = /^-?[0-9]+\.?[0-9]*$/;
+
 function filterSql(filters: EventMetricDefinition["filters"]): SQL[] {
   const out: SQL[] = [];
   for (const f of filters) {
-    const column = f.field.startsWith("metadata.")
-      ? sql`${schema.events.metadata}->>${f.field.slice("metadata.".length)}`
-      : f.field === "contact_email"
-        ? sql`${schema.events.contactEmail}`
-        : sql`${schema.events.provider}`;
+    const isAmount = f.field === "amount";
+    // The amount column is numeric; everything else compares as text.
+    const column = isAmount
+      ? sql`${schema.events.amount}::text`
+      : f.field.startsWith("metadata.")
+        ? sql`${schema.events.metadata}->>${f.field.slice("metadata.".length)}`
+        : f.field === "contact_email"
+          ? sql`${schema.events.contactEmail}`
+          : sql`${schema.events.provider}`;
     const value = f.value === undefined ? null : String(f.value);
+
     switch (f.op) {
       case "equals":
-        out.push(sql`${column} = ${value}`);
+        if (isAmount) {
+          if (value === null || !NUMERIC_RE.test(value)) throw new Error("Amount filters need a number");
+          out.push(sql`${schema.events.amount} = ${value}::numeric`);
+        } else {
+          out.push(sql`${column} = ${value}`);
+        }
         break;
       case "not_equals":
         out.push(sql`(${column} is distinct from ${value})`);
@@ -63,15 +75,29 @@ function filterSql(filters: EventMetricDefinition["filters"]): SQL[] {
       case "contains":
         out.push(sql`${column} ilike ${"%" + (value ?? "") + "%"}`);
         break;
+      case "not_contains":
+        // Null-inclusive: a missing field genuinely doesn't contain the value.
+        out.push(sql`(${column} is null or ${column} not ilike ${"%" + (value ?? "") + "%"})`);
+        break;
+      case "starts_with":
+        out.push(sql`${column} ilike ${(value ?? "") + "%"}`);
+        break;
       case "exists":
         out.push(sql`${column} is not null`);
         break;
       case "gt":
       case "lt": {
+        if (value === null || !NUMERIC_RE.test(value)) {
+          throw new Error("Greater/less-than filters need a number");
+        }
         const cmp = f.op === "gt" ? sql`>` : sql`<`;
-        out.push(
-          sql`(${column} ~ '^-?[0-9]+\\.?[0-9]*$' and (${column})::numeric ${cmp} ${value}::numeric)`,
-        );
+        if (isAmount) {
+          out.push(sql`${schema.events.amount} ${cmp} ${value}::numeric`);
+        } else {
+          out.push(
+            sql`(${column} ~ '^-?[0-9]+\\.?[0-9]*$' and (${column})::numeric ${cmp} ${value}::numeric)`,
+          );
+        }
         break;
       }
     }

@@ -33,7 +33,7 @@ function statusDot(source: SidebarSource): string {
 export function Sidebar({ sources }: { sources: SidebarSource[] }) {
   const pathname = usePathname();
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col bg-zinc-950 text-zinc-300 md:flex">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-zinc-900 bg-black text-zinc-300 md:flex">
       {/* Brand */}
       <div className="flex items-center gap-3 px-5 pb-5 pt-6">
         <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-base font-bold text-white shadow-lg shadow-primary/30">
