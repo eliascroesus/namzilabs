@@ -17,16 +17,35 @@ const TRACKED = new Set([
 ]);
 
 /**
- * Instantly (API v2, Bearer key). One webhook subscribed to all_events;
- * normalize() filters to the tracked set. Instantly webhooks require the
- * customer's plan to be Hypergrowth or higher — registration failures are
- * surfaced as a human plan message.
+ * Daily-rollup metrics for the polling fallback (documented endpoint:
+ * GET /campaigns/analytics/daily → [{ date, sent, unique_opened, ... }]).
+ * Unique variants are used so a rollup approximates per-event semantics.
+ */
+const DAILY_METRICS: Array<[apiField: string, eventType: string]> = [
+  ["sent", "email_sent_daily"],
+  ["unique_opened", "email_opened_daily"],
+  ["unique_replies", "reply_received_daily"],
+  ["unique_clicks", "email_clicked_daily"],
+];
+
+/** Yesterday in UTC (YYYY-MM-DD) — the newest FINALIZED analytics day. */
+function yesterdayUtc(): string {
+  return new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Instantly (API v2, Bearer key). Primary path: one webhook subscribed to
+ * all_events; normalize() filters to the tracked set. Instantly webhooks
+ * require the customer's plan to be Hypergrowth or higher — when
+ * registration fails, the connection falls back to POLLING the documented
+ * daily campaign analytics endpoint.
  *
- * NOTE: the plan's polling fallback for lower Instantly plans is
- * deliberately NOT implemented yet — the analytics endpoints return
- * aggregates, not per-event records, and per-email listing semantics
- * couldn't be verified against the docs from this build environment.
- * Flagged in PROJECT_STATE.md rather than built on guessed endpoints.
+ * Fallback semantics (deliberate): only FINALIZED days (yesterday and
+ * earlier, UTC) are emitted, as one event per (day, metric) with the count
+ * in `amount` and event types suffixed `_daily`. Finalized-only keeps the
+ * DO-NOTHING idempotent upsert correct (a day's count never changes after
+ * emission); the suffix keeps rollups from being mistaken for per-event
+ * rows in metrics (count the rollups via sum(amount), not count(*)).
  */
 export const instantlyConnector: Connector = {
   provider: "instantly",
@@ -83,7 +102,59 @@ export const instantlyConnector: Connector = {
     });
   },
 
+  async poll(auth, _config, cursor) {
+    const yesterday = yesterdayUtc();
+    const last = typeof cursor.lastFinalizedDate === "string" ? cursor.lastFinalizedDate : null;
+
+    // First poll (at connect): snapshot the cursor so history doesn't flood
+    // in — only days completed after connecting produce events.
+    if (!last) return { records: [], nextCursor: { lastFinalizedDate: yesterday } };
+    if (last >= yesterday) return { records: [], nextCursor: cursor };
+
+    const startDate = new Date(new Date(`${last}T00:00:00Z`).getTime() + 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const res = await apiFetch<unknown>(
+      `${BASE}/campaigns/analytics/daily?start_date=${startDate}&end_date=${yesterday}`,
+      { headers: bearer(auth) },
+    );
+    const days = Array.isArray(res)
+      ? (res as Record<string, unknown>[])
+      : ((res as { items?: Record<string, unknown>[] })?.items ?? []);
+
+    const records: RawRecord[] = [];
+    for (const day of days) {
+      const date = day.date as string | undefined;
+      if (!date || date > yesterday) continue; // never emit a still-changing day
+      for (const [apiField, eventType] of DAILY_METRICS) {
+        const count = day[apiField];
+        if (typeof count === "number" && count > 0) {
+          records.push({ kind: "daily_analytics", date, metric: eventType, count });
+        }
+      }
+    }
+    return { records, nextCursor: { lastFinalizedDate: yesterday } };
+  },
+
   normalize(raw: RawRecord): NormalizedEvent[] {
+    // Polling-fallback rollups (see connector doc comment).
+    if (raw.kind === "daily_analytics") {
+      const date = raw.date as string;
+      const metric = raw.metric as string;
+      const count = raw.count as number;
+      if (!date || !metric || typeof count !== "number") return [];
+      return [
+        {
+          eventType: metric,
+          externalId: `daily:${date}:${metric}`,
+          // Noon UTC keeps the event on the right calendar day in most zones.
+          occurredAt: new Date(`${date}T12:00:00Z`),
+          amount: String(count),
+          metadata: { scope: "all_campaigns", date, daily_rollup: true },
+        },
+      ];
+    }
+
     const eventType = raw.event_type as string | undefined;
     if (!eventType || !TRACKED.has(eventType)) return [];
 

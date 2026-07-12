@@ -86,6 +86,12 @@ export default async function ConnectionDetailPage({
         {quiet ? (
           <span className="text-sm text-muted-foreground">No events for 48h+ — is the source tool active?</span>
         ) : null}
+        {conn.config.webhookUnavailable === true ? (
+          <span className="text-sm text-muted-foreground">
+            Daily-rollup mode: this Instantly plan has no webhooks, so counts arrive once per day
+            (previous day, as *_daily events).
+          </span>
+        ) : null}
       </div>
 
       {conn.status === "error" && conn.errorMessage ? (

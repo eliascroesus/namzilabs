@@ -188,7 +188,10 @@ export function ConnectWizard({
                 const res = await finalizeConnection(connectionId, name);
                 setBusy(false);
                 if (!res.ok) return setError(res.error);
-                toast.success("Connected", { description: `${name} is live — data flows in automatically.` });
+                toast.success("Connected", {
+                  description: res.data.notice ?? `${name} is live — data flows in automatically.`,
+                  duration: res.data.notice ? 10000 : undefined,
+                });
                 router.push(`/integrations/${connectionId}`);
               }}
             />
