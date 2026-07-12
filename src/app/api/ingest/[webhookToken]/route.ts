@@ -66,10 +66,18 @@ export async function POST(
     [payload as Record<string, unknown>],
     pickHeaders(request.headers),
   );
-  await inngest.send({
-    name: "ingest/raw_event.received",
-    data: { rawEventId, connectionId: conn.id },
-  });
+
+  // The payload is safely stored — a queueing hiccup must never make the
+  // provider believe delivery failed (it would retry forever). The 5-minute
+  // cron sweeps any raw event left pending.
+  try {
+    await inngest.send({
+      name: "ingest/raw_event.received",
+      data: { rawEventId, connectionId: conn.id },
+    });
+  } catch {
+    return NextResponse.json({ ok: true, queued: false });
+  }
 
   return NextResponse.json({ ok: true });
 }

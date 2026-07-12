@@ -27,6 +27,7 @@ export const calendlyConnector: Connector = {
   label: "Calendly",
   description: "Track bookings and cancellations the moment they happen.",
   credentialsHelpUrl: "https://calendly.com/integrations/api_webhooks",
+  producedEventTypes: ["booking_created", "booking_canceled"],
 
   async testConnection(auth) {
     try {

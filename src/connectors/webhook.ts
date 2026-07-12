@@ -42,6 +42,7 @@ export const webhookConnector: Connector = {
   authMethod: "none",
   label: "Webhook",
   description: "Receive events from any tool that can send an HTTP webhook.",
+  producedEventTypes: [], // derived from config.eventType at read time
 
   async testConnection() {
     return { ok: true };

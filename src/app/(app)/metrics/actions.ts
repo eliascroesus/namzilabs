@@ -27,31 +27,87 @@ export type EventTypeOption = {
   count: number;
 };
 
-/** Event types that actually exist in this workspace, with live counts. */
+/**
+ * Everything the workspace CAN measure: each connection's declared event
+ * types (so the builder works before any data arrives) merged with live
+ * counts of what has actually been ingested — plus any extra types found in
+ * the data that the declarations don't know about.
+ */
 export async function getEventTypeOptions(): Promise<ActionResult<EventTypeOption[]>> {
   const workspace = await currentWorkspace();
-  const rows = await db()
-    .select({
-      eventType: schema.events.eventType,
-      provider: schema.events.provider,
-      connectionId: schema.events.connectionId,
-      connectionName: schema.connections.name,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(schema.events)
-    .innerJoin(schema.connections, eq(schema.connections.id, schema.events.connectionId))
-    .where(eq(schema.events.workspaceId, workspace.id))
-    .groupBy(
-      schema.events.eventType,
-      schema.events.provider,
-      schema.events.connectionId,
-      schema.connections.name,
-    )
-    .orderBy(desc(sql`count(*)`));
-  return {
-    ok: true,
-    data: rows.map((r) => ({ ...r, label: eventTypeLabel(r.eventType) })),
-  };
+  const { getConnector } = await import("@/connectors");
+  const { ne } = await import("drizzle-orm");
+
+  const [connections, counts] = await Promise.all([
+    db()
+      .select({
+        id: schema.connections.id,
+        name: schema.connections.name,
+        provider: schema.connections.provider,
+        config: schema.connections.config,
+      })
+      .from(schema.connections)
+      .where(
+        and(
+          eq(schema.connections.workspaceId, workspace.id),
+          ne(schema.connections.status, "deleted"),
+        ),
+      ),
+    db()
+      .select({
+        eventType: schema.events.eventType,
+        connectionId: schema.events.connectionId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(schema.events)
+      .where(eq(schema.events.workspaceId, workspace.id))
+      .groupBy(schema.events.eventType, schema.events.connectionId),
+  ]);
+
+  const countFor = new Map(counts.map((c) => [`${c.connectionId}:${c.eventType}`, c.count]));
+  const options: EventTypeOption[] = [];
+  const seen = new Set<string>();
+
+  for (const conn of connections) {
+    const connector = getConnector(conn.provider);
+    // The generic webhook connector's type comes from its configuration.
+    const declared =
+      conn.provider === "webhook"
+        ? [((conn.config as { eventType?: string })?.eventType ?? "webhook_event")]
+        : connector.producedEventTypes;
+    for (const eventType of declared) {
+      const key = `${conn.id}:${eventType}`;
+      seen.add(key);
+      options.push({
+        eventType,
+        label: eventTypeLabel(eventType),
+        provider: conn.provider,
+        connectionId: conn.id,
+        connectionName: conn.name,
+        count: countFor.get(key) ?? 0,
+      });
+    }
+  }
+  // Data can contain types the declarations don't know (e.g. renamed webhook
+  // event types) — surface them too, never hide real data.
+  const connById = new Map(connections.map((c) => [c.id, c]));
+  for (const c of counts) {
+    const key = `${c.connectionId}:${c.eventType}`;
+    if (seen.has(key)) continue;
+    const conn = connById.get(c.connectionId);
+    if (!conn) continue;
+    options.push({
+      eventType: c.eventType,
+      label: eventTypeLabel(c.eventType),
+      provider: conn.provider,
+      connectionId: conn.id,
+      connectionName: conn.name,
+      count: c.count,
+    });
+  }
+
+  options.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  return { ok: true, data: options };
 }
 
 /** Metadata keys present on recent matching events (sampled last 100). */

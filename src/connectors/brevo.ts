@@ -34,6 +34,7 @@ export const brevoConnector: Connector = {
   label: "Brevo",
   description: "Track email deliveries, opens, clicks, bounces, and unsubscribes.",
   credentialsHelpUrl: "https://app.brevo.com/settings/keys/api",
+  producedEventTypes: ["email_delivered", "email_opened", "email_clicked", "email_bounced", "email_unsubscribed"],
 
   async testConnection(auth) {
     try {

@@ -53,6 +53,7 @@ export const instantlyConnector: Connector = {
   label: "Instantly",
   description: "Track cold-email sends, opens, replies, and booked meetings.",
   credentialsHelpUrl: "https://app.instantly.ai/app/settings/integrations",
+  producedEventTypes: ["email_sent", "email_opened", "reply_received", "lead_interested", "lead_meeting_booked", "email_sent_daily", "email_opened_daily", "reply_received_daily", "email_clicked_daily"],
 
   async testConnection(auth) {
     try {

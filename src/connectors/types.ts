@@ -43,6 +43,12 @@ export interface Connector {
   description: string;
   /** Where the user finds their API key (help link for the wizard). */
   credentialsHelpUrl?: string;
+  /**
+   * Event types this connector CAN produce — powers the metric builder even
+   * before any events have arrived (never a dead end). The generic webhook
+   * connector derives its type from config at read time instead.
+   */
+  producedEventTypes: string[];
 
   // -- Setup-time -----------------------------------------------------------
   testConnection(auth: AuthData, config: Config): Promise<{ ok: boolean; error?: string }>;
