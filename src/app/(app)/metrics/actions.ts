@@ -110,6 +110,80 @@ export async function getEventTypeOptions(): Promise<ActionResult<EventTypeOptio
   return { ok: true, data: options };
 }
 
+export type FilterFieldOption = {
+  /** Engine field id: "contact_email" | "provider" | "amount" | "metadata.<key>" */
+  field: string;
+  label: string;
+  group: "Built-in" | "Fields from your data";
+};
+
+const SAFE_KEY_RE = /^[a-zA-Z0-9_. -]{1,80}$/;
+
+/**
+ * Every field the selected event types can be filtered on — Zapier-style:
+ * built-ins + each connector's declared metadata fields + Google Sheets
+ * column headers (from config) + keys sampled from real ingested events.
+ */
+export async function getFilterFields(
+  eventTypes: string[],
+): Promise<ActionResult<FilterFieldOption[]>> {
+  const workspace = await currentWorkspace();
+  const { getConnector } = await import("@/connectors");
+  const { ne } = await import("drizzle-orm");
+
+  const builtins: FilterFieldOption[] = [
+    { field: "contact_email", label: "Contact email", group: "Built-in" },
+    { field: "provider", label: "Source tool", group: "Built-in" },
+    { field: "amount", label: "Amount", group: "Built-in" },
+  ];
+
+  const keys = new Set<string>();
+
+  const connections = await db()
+    .select({
+      id: schema.connections.id,
+      provider: schema.connections.provider,
+      config: schema.connections.config,
+    })
+    .from(schema.connections)
+    .where(
+      and(eq(schema.connections.workspaceId, workspace.id), ne(schema.connections.status, "deleted")),
+    );
+
+  for (const conn of connections) {
+    const connector = getConnector(conn.provider);
+    const declared =
+      conn.provider === "webhook"
+        ? [((conn.config as { eventType?: string })?.eventType ?? "webhook_event")]
+        : connector.producedEventTypes;
+    if (eventTypes.length > 0 && !declared.some((t) => eventTypes.includes(t))) continue;
+
+    for (const key of connector.metadataFields) {
+      if (SAFE_KEY_RE.test(key)) keys.add(key);
+    }
+    // Google Sheets: every column header is a filterable field.
+    if (conn.provider === "google_sheets") {
+      const header = (conn.config as { headerRow?: string[] })?.headerRow ?? [];
+      for (const raw of header) {
+        const key = String(raw).slice(0, 60).trim();
+        if (key && SAFE_KEY_RE.test(key)) keys.add(key);
+      }
+    }
+  }
+
+  // Merge in whatever real events actually carry (sampled last 100).
+  if (eventTypes.length > 0) {
+    const sampled = await getMetadataKeys(eventTypes);
+    if (sampled.ok) for (const k of sampled.data) keys.add(k);
+  }
+
+  const dataFields: FilterFieldOption[] = [...keys]
+    .sort((a, b) => a.localeCompare(b))
+    .map((k) => ({ field: `metadata.${k}`, label: k, group: "Fields from your data" as const }));
+
+  return { ok: true, data: [...builtins, ...dataFields] };
+}
+
 /** Metadata keys present on recent matching events (sampled last 100). */
 export async function getMetadataKeys(eventTypes: string[]): Promise<ActionResult<string[]>> {
   const workspace = await currentWorkspace();

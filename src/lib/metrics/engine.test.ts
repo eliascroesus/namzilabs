@@ -132,6 +132,63 @@ describe("metric engine (real SQL via PGlite)", () => {
     expect(gt.total).toBe(1);
   });
 
+  it("supports the extended operators and amount filters", async () => {
+    const startsWith = await runMetric(
+      def({ filters: [{ field: "metadata.campaign", op: "starts_with", value: "q3" }] }),
+      workspaceId,
+      range,
+      "day",
+    );
+    expect(startsWith.total).toBe(2);
+
+    // null-inclusive: rows without the key also "don't contain" the value
+    const notContains = await runMetric(
+      def({ filters: [{ field: "metadata.campaign", op: "not_contains", value: "q3" }] }),
+      workspaceId,
+      range,
+      "day",
+    );
+    expect(notContains.total).toBe(2); // evergreen + the no-campaign row
+
+    const amountGt = await runMetric(
+      def({
+        source: { connectionIds: "all", eventTypes: ["opportunity_created"] },
+        filters: [{ field: "amount", op: "gt", value: 150 }],
+      }),
+      workspaceId,
+      range,
+      "day",
+    );
+    expect(amountGt.total).toBe(1);
+
+    await expect(
+      runMetric(
+        def({ filters: [{ field: "amount", op: "gt", value: "not-a-number" }] }),
+        workspaceId,
+        range,
+        "day",
+      ),
+    ).rejects.toThrow(/number/);
+  });
+
+  it("sums and averages arbitrary numeric metadata fields", async () => {
+    const sumScore = await runMetric(
+      def({ aggregation: { type: "sum", field: "metadata.score" } }),
+      workspaceId,
+      range,
+      "day",
+    );
+    expect(sumScore.total).toBe(11); // 8 + 3; rows without a numeric score ignored
+
+    const unique = await runMetric(
+      def({ aggregation: { type: "unique_count", field: "external_id" } }),
+      workspaceId,
+      range,
+      "day",
+    );
+    expect(unique.total).toBe(4);
+  });
+
   it("returns zero/empty for event types with no data", async () => {
     const res = await runMetric(
       def({ source: { connectionIds: "all", eventTypes: ["nothing_here"] } }),

@@ -17,19 +17,31 @@ import type { EventMetricDefinition, Filter } from "@/lib/metrics/types";
 import type { Provider } from "@/db/schema";
 import { cn } from "@/lib/utils";
 import {
-  getMetadataKeys,
+  getFilterFields,
   getMetadataValues,
   saveMetric,
   type EventTypeOption,
+  type FilterFieldOption,
 } from "./actions";
 import { addWidget } from "../dashboard/actions";
 import { RecordInspector } from "./record-inspector";
 
 const AGG_CARDS = [
   { value: "count", title: "Count", hint: "How many times this happened" },
-  { value: "unique_count", title: "Unique people", hint: "Distinct contacts, each counted once" },
-  { value: "sum", title: "Sum of amount", hint: "Add up the amount field (revenue, daily totals…)" },
-  { value: "average", title: "Average amount", hint: "Mean of the amount field" },
+  { value: "unique_count", title: "Unique", hint: "Distinct people or records, each counted once" },
+  { value: "sum", title: "Sum", hint: "Add up any numeric field (revenue, deal size, totals…)" },
+  { value: "average", title: "Average", hint: "Mean of any numeric field" },
+] as const;
+
+const OPS = [
+  { value: "equals", label: "is" },
+  { value: "not_equals", label: "is not" },
+  { value: "contains", label: "contains" },
+  { value: "not_contains", label: "doesn't contain" },
+  { value: "starts_with", label: "starts with" },
+  { value: "exists", label: "exists" },
+  { value: "gt", label: "greater than" },
+  { value: "lt", label: "less than" },
 ] as const;
 
 type PreviewData = {
@@ -48,14 +60,23 @@ export function MetricBuilder({
   initial: { id: string; name: string; definition: EventMetricDefinition } | null;
 }) {
   const router = useRouter();
+  const initialAgg = initial?.definition.aggregation;
   const [eventTypes, setEventTypes] = React.useState<string[]>(
     initial?.definition.source.eventTypes ?? [],
   );
   const [filters, setFilters] = React.useState<Filter[]>(initial?.definition.filters ?? []);
-  const [aggType, setAggType] = React.useState<string>(initial?.definition.aggregation.type ?? "count");
+  const [aggType, setAggType] = React.useState<string>(initialAgg?.type ?? "count");
+  const [aggField, setAggField] = React.useState<string>(
+    initialAgg && (initialAgg.type === "sum" || initialAgg.type === "average")
+      ? initialAgg.field
+      : "amount",
+  );
+  const [uniqueField, setUniqueField] = React.useState<"contact_email" | "external_id">(
+    initialAgg?.type === "unique_count" ? initialAgg.field : "contact_email",
+  );
   const [name, setName] = React.useState(initial?.name ?? "");
   const [nameTouched, setNameTouched] = React.useState(Boolean(initial));
-  const [metadataKeys, setMetadataKeys] = React.useState<string[]>([]);
+  const [fields, setFields] = React.useState<FilterFieldOption[]>([]);
   const [valueOptions, setValueOptions] = React.useState<Record<string, string[]>>({});
   const [preview, setPreview] = React.useState<PreviewData | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -77,15 +98,15 @@ export function MetricBuilder({
       aggType === "count"
         ? { type: "count" as const }
         : aggType === "unique_count"
-          ? { type: "unique_count" as const, field: "contact_email" as const }
-          : { type: aggType as "sum" | "average", field: "amount" as const };
+          ? { type: "unique_count" as const, field: uniqueField }
+          : { type: aggType as "sum" | "average", field: aggField as "amount" };
     return {
       type: "event",
       source: { connectionIds: "all", eventTypes },
       filters: filters.filter((f) => f.op === "exists" || f.value !== undefined),
       aggregation,
     };
-  }, [eventTypes, filters, aggType]);
+  }, [eventTypes, filters, aggType, aggField, uniqueField]);
 
   // Live preview: debounce, last 30 days.
   React.useEffect(() => {
@@ -119,10 +140,11 @@ export function MetricBuilder({
     };
   }, [definition]);
 
-  // Metadata keys for the filter dropdown follow the selected event types.
+  // Filterable fields follow the selected event types: declared connector
+  // fields + Sheets column headers + keys sampled from real data.
   React.useEffect(() => {
     if (eventTypes.length === 0) return;
-    getMetadataKeys(eventTypes).then((res) => res.ok && setMetadataKeys(res.data));
+    getFilterFields(eventTypes).then((res) => res.ok && setFields(res.data));
   }, [eventTypes]);
 
   const suggestName = React.useCallback(
@@ -136,11 +158,9 @@ export function MetricBuilder({
   );
 
   const toggleEventType = (t: string) => {
-    setEventTypes((prev) => {
-      const next = prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t];
-      suggestName(next, aggType);
-      return next;
-    });
+    const next = eventTypes.includes(t) ? eventTypes.filter((x) => x !== t) : [...eventTypes, t];
+    setEventTypes(next);
+    suggestName(next, aggType);
   };
 
   const loadValues = async (key: string) => {
@@ -239,11 +259,16 @@ export function MetricBuilder({
                     loadValues(field);
                   }}
                 >
-                  <option value="contact_email">Contact email</option>
-                  <option value="provider">Source tool</option>
-                  {metadataKeys.map((k) => (
-                    <option key={k} value={`metadata.${k}`}>{k}</option>
-                  ))}
+                  <optgroup label="Built-in">
+                    {fields.filter((o) => o.group === "Built-in").map((o) => (
+                      <option key={o.field} value={o.field}>{o.label}</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Fields from your data">
+                    {fields.filter((o) => o.group !== "Built-in").map((o) => (
+                      <option key={o.field} value={o.field}>{o.label}</option>
+                    ))}
+                  </optgroup>
                 </select>
                 <select
                   className={selectCls}
@@ -254,12 +279,9 @@ export function MetricBuilder({
                     )
                   }
                 >
-                  <option value="equals">is</option>
-                  <option value="not_equals">is not</option>
-                  <option value="contains">contains</option>
-                  <option value="exists">exists</option>
-                  <option value="gt">greater than</option>
-                  <option value="lt">less than</option>
+                  {OPS.map((op) => (
+                    <option key={op.value} value={op.value}>{op.label}</option>
+                  ))}
                 </select>
                 {f.op !== "exists" ? (
                   <>
@@ -322,9 +344,38 @@ export function MetricBuilder({
                 </button>
               ))}
             </div>
+            {aggType === "sum" || aggType === "average" ? (
+              <div className="max-w-xs space-y-1">
+                <Label>{aggType === "sum" ? "Sum" : "Average"} of which field?</Label>
+                <select className={cn(selectCls, "w-full")} value={aggField} onChange={(e) => setAggField(e.target.value)}>
+                  <option value="amount">Amount</option>
+                  {fields
+                    .filter((o) => o.group !== "Built-in")
+                    .map((o) => (
+                      <option key={o.field} value={o.field}>{o.label}</option>
+                    ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  Non-numeric values in the field are ignored automatically.
+                </p>
+              </div>
+            ) : null}
+            {aggType === "unique_count" ? (
+              <div className="max-w-xs space-y-1">
+                <Label>Unique by</Label>
+                <select
+                  className={cn(selectCls, "w-full")}
+                  value={uniqueField}
+                  onChange={(e) => setUniqueField(e.target.value as "contact_email" | "external_id")}
+                >
+                  <option value="contact_email">Contact (each person once)</option>
+                  <option value="external_id">Record (each record once)</option>
+                </select>
+              </div>
+            ) : null}
             {eventTypes.some((t) => t.endsWith("_daily")) && aggType === "count" ? (
-              <p className="text-xs text-amber-700">
-                Heads up: daily-total events carry their count in the amount field — pick “Sum of amount” to get real totals.
+              <p className="text-xs text-amber-500">
+                Heads up: daily-total events carry their count in the amount field — pick “Sum” of Amount to get real totals.
               </p>
             ) : null}
           </section>
@@ -355,7 +406,13 @@ export function MetricBuilder({
       <div className="lg:sticky lg:top-20 lg:self-start">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">Live preview · last 30 days</CardTitle>
+            <CardTitle className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>Live preview · last 30 days</span>
+              <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-400">
+                <span className="size-1.5 animate-pulse rounded-full bg-emerald-400" />
+                Live
+              </span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {!definition ? (

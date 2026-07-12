@@ -49,6 +49,13 @@ export interface Connector {
    * connector derives its type from config at read time instead.
    */
   producedEventTypes: string[];
+  /**
+   * Metadata keys this connector writes into events.metadata — the metric
+   * builder's filter-field picker shows these immediately (merged with
+   * whatever is actually present in ingested data). Google Sheets adds its
+   * column headers from config at read time.
+   */
+  metadataFields: string[];
 
   // -- Setup-time -----------------------------------------------------------
   testConnection(auth: AuthData, config: Config): Promise<{ ok: boolean; error?: string }>;

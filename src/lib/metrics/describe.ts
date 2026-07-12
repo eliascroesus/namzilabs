@@ -19,7 +19,12 @@ export function describeDefinition(
     return `${num} as a percentage of ${den}`;
   }
   const types = def.source.eventTypes.map(eventTypeLabel).join(" + ");
-  const agg = AGG_LABEL[def.aggregation.type] ?? "Count of";
+  let agg = AGG_LABEL[def.aggregation.type] ?? "Count of";
+  if (def.aggregation.type === "sum" || def.aggregation.type === "average") {
+    const fieldName =
+      def.aggregation.field === "amount" ? "amount" : def.aggregation.field.slice("metadata.".length);
+    agg = `${def.aggregation.type === "sum" ? "Sum" : "Average"} of ${fieldName} across`;
+  }
   const filters = def.filters
     .map((f) => {
       const field = f.field.startsWith("metadata.") ? f.field.slice(9) : f.field.replace("_", " ");

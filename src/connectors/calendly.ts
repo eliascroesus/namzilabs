@@ -3,8 +3,13 @@ import type { Connector, NormalizedEvent, RawRecord } from "@/connectors/types";
 import { apiFetch, ConnectorHttpError, hmacSha256Hex, parseDate, safeEqual } from "@/connectors/util";
 
 const BASE = "https://api.calendly.com";
-/** Reject signatures older than this (replay protection, generous for retries). */
-const SIGNATURE_TOLERANCE_SECONDS = 60 * 60;
+/**
+ * Reject signatures older than this. Generous on purpose: Calendly retries
+ * failed deliveries for a long time, and replays are harmless here anyway —
+ * the idempotent upsert dedupes any repeated payload. The signature's real
+ * job is preventing forgery, which this fully preserves.
+ */
+const SIGNATURE_TOLERANCE_SECONDS = 24 * 60 * 60;
 
 type CalendlyMe = {
   resource: { uri: string; current_organization: string; name: string };
@@ -28,6 +33,7 @@ export const calendlyConnector: Connector = {
   description: "Track bookings and cancellations the moment they happen.",
   credentialsHelpUrl: "https://calendly.com/integrations/api_webhooks",
   producedEventTypes: ["booking_created", "booking_canceled"],
+  metadataFields: ["event_name", "start_time", "end_time", "status", "rescheduled", "utm_source", "utm_medium", "utm_campaign"],
 
   async testConnection(auth) {
     try {

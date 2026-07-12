@@ -71,6 +71,7 @@ export const googleSheetsConnector: Connector = {
   label: "Google Sheets",
   description: "Turn every new spreadsheet row into a trackable event.",
   producedEventTypes: ["row_added"],
+  metadataFields: [], // the sheet's column headers, added from config at read time
 
   async testConnection(auth) {
     try {
@@ -87,7 +88,8 @@ export const googleSheetsConnector: Connector = {
     const rows = await readAllRows(auth, cfg);
     if (rows.length < 2) return [];
     const header = rows[0];
-    return rows.slice(-3).map((row) => rowToObject(header, row));
+    // slice(1) first: the header row must never appear as a "record".
+    return rows.slice(1).slice(-3).map((row) => rowToObject(header, row));
   },
 
   async poll(auth, config, cursor) {
