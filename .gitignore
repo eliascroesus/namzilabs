@@ -145,3 +145,5 @@ vite.config.ts.timestamp-*
 # Repo coordination additions
 .vercel
 .DS_Store
+graphify-out/graph.html
+graphify-out/.graphify_analysis.json
