@@ -38,9 +38,14 @@ export default async function MetricsPage() {
       try {
         const parsed = metricDefinitionSchema.parse(m.definition);
         const result = await runMetric(parsed, workspace.id, range, "day");
-        return { metric: m, description: describeDefinition(parsed, names), result, error: null };
+        const unit =
+          parsed.type === "ratio"
+            ? ("percent" as const)
+            : ((parsed.unit ?? "number") as "number" | "currency" | "percent");
+        const color = parsed.type === "ratio" ? undefined : parsed.color;
+        return { metric: m, description: describeDefinition(parsed, names), result, unit, color, error: null };
       } catch {
-        return { metric: m, description: "Invalid definition", result: null, error: "Could not compute" };
+        return { metric: m, description: "Invalid definition", result: null, unit: "number" as const, color: undefined, error: "Could not compute" };
       }
     }),
   );
@@ -72,7 +77,7 @@ export default async function MetricsPage() {
         />
       ) : (
         <div className="space-y-3">
-          {withData.map(({ metric, description, result, error }) => {
+          {withData.map(({ metric, description, result, unit, color, error }) => {
             const points = (result?.series ?? []).slice(-14).map((p) => ({
               label: p.bucket.slice(0, 10),
               value: p.value ?? 0,
@@ -80,6 +85,7 @@ export default async function MetricsPage() {
             return (
               <Card key={metric.id}>
                 <CardContent className="flex flex-wrap items-center gap-4 p-4">
+                  <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: color ?? "var(--color-primary)" }} />
                   <div className="min-w-0 flex-1">
                     <Link href={`/metrics/${metric.id}/edit`} className="font-medium hover:underline">
                       {metric.name}
@@ -88,7 +94,7 @@ export default async function MetricsPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-xl font-semibold tabular-nums">
-                      {error ? "—" : formatValue(result!.total, result!.format)}
+                      {error ? "—" : formatValue(result!.total, result!.format ?? unit)}
                     </p>
                     <p className="text-xs text-muted-foreground">last 30 days</p>
                   </div>

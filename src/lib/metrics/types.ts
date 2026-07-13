@@ -47,6 +47,10 @@ export const eventMetricSchema = z.object({
       field: z.union([z.literal("amount"), z.string().regex(/^metadata\.[a-zA-Z0-9_. -]{1,80}$/)]),
     }),
   ]),
+  /** Display hint: how the number is formatted in the UI. */
+  unit: z.enum(["number", "currency", "percent"]).optional(),
+  /** Graph colour token (hex) chosen in the builder. */
+  color: z.string().max(9).optional(),
 });
 export type EventMetricDefinition = z.infer<typeof eventMetricSchema>;
 

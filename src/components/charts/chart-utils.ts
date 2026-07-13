@@ -1,12 +1,15 @@
 export type SeriesPoint = { bucket: string; value: number | null };
 
-export function formatValue(v: number | null, format?: "percent"): string {
+export type Unit = "number" | "currency" | "percent";
+
+export function formatValue(v: number | null, format?: "percent" | Unit): string {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   if (format === "percent") return `${v.toFixed(1)}%`;
-  if (Math.abs(v) >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(v) >= 10_000) return `${(v / 1_000).toFixed(1)}k`;
-  if (Number.isInteger(v)) return String(v);
-  return v.toFixed(2);
+  const prefix = format === "currency" ? "$" : "";
+  if (Math.abs(v) >= 1_000_000) return `${prefix}${(v / 1_000_000).toFixed(1)}M`;
+  if (Math.abs(v) >= 10_000) return `${prefix}${(v / 1_000).toFixed(1)}k`;
+  if (Number.isInteger(v)) return `${prefix}${v}`;
+  return `${prefix}${v.toFixed(2)}`;
 }
 
 export function formatBucket(bucket: string, grain: string): string {
