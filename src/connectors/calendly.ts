@@ -56,6 +56,38 @@ export const calendlyConnector: Connector = {
     return events.collection ?? [];
   },
 
+  async backfill(auth) {
+    // Historical bookings: list recent scheduled events, then their invitees.
+    // Wrapped to match the webhook shape normalize() expects.
+    const me = await apiFetch<CalendlyMe>(`${BASE}/users/me`, { headers: authHeaders(auth) });
+    const events = await apiFetch<{ collection?: Record<string, unknown>[] }>(
+      `${BASE}/scheduled_events?user=${encodeURIComponent(me.resource.uri)}&sort=start_time:desc&count=50`,
+      { headers: authHeaders(auth) },
+    );
+    const out: RawRecord[] = [];
+    for (const se of events.collection ?? []) {
+      const uri = se.uri as string | undefined;
+      if (!uri) continue;
+      const uuid = uri.split("/").pop();
+      try {
+        const invitees = await apiFetch<{ collection?: Record<string, unknown>[] }>(
+          `${BASE}/scheduled_events/${uuid}/invitees?count=100`,
+          { headers: authHeaders(auth) },
+        );
+        for (const invitee of invitees.collection ?? []) {
+          out.push({
+            event: invitee.status === "canceled" ? "invitee.canceled" : "invitee.created",
+            created_at: invitee.created_at,
+            payload: { ...invitee, scheduled_event: se },
+          });
+        }
+      } catch {
+        // Skip this event if its invitees can't be read; keep the rest.
+      }
+    }
+    return out;
+  },
+
   async registerWebhook(auth, config, callbackUrl) {
     const me = await apiFetch<CalendlyMe>(`${BASE}/users/me`, { headers: authHeaders(auth) });
     const signingKey = randomBytes(32).toString("hex");

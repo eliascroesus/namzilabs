@@ -279,18 +279,20 @@ export async function finalizeConnection(
       }
     }
 
-    // Polling providers: snapshot the current state so history doesn't flood
-    // in as "new" events — only activity after connect counts. Skipped when
-    // a live webhook covers ingestion.
+    // Polling providers: seed the cursor so the FIRST poll imports history,
+    // not skips it. Google Sheets → empty cursor ingests every existing row;
+    // Instantly rollups → start 90 days back.
     if (connector.poll && !webhookRegistered) {
-      const authData = await getFreshAuth(conn);
-      const { nextCursor } = await connector.poll(authData, conn.config, {});
+      const startCursor: Record<string, unknown> =
+        conn.provider === "instantly"
+          ? { lastFinalizedDate: new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10) }
+          : {};
       await db()
         .insert(schema.syncState)
-        .values({ connectionId: conn.id, cursor: nextCursor, lastSyncedAt: new Date() })
+        .values({ connectionId: conn.id, cursor: startCursor, lastSyncedAt: null })
         .onConflictDoUpdate({
           target: schema.syncState.connectionId,
-          set: { cursor: nextCursor, lastSyncedAt: new Date() },
+          set: { cursor: startCursor, lastSyncedAt: null },
         });
     }
 
@@ -298,6 +300,15 @@ export async function finalizeConnection(
       .update(schema.connections)
       .set({ name: trimmed, status: "active", errorMessage: null })
       .where(eq(schema.connections.id, conn.id));
+
+    // Kick off ingestion now (durably, via Inngest) — the connection should
+    // never sit empty waiting for the next webhook.
+    const jobs: { name: string; data: Record<string, string> }[] = [];
+    if (connector.backfill) jobs.push({ name: "ingest/backfill.requested", data: { connectionId: conn.id } });
+    if (connector.poll && !webhookRegistered) {
+      jobs.push({ name: "ingest/poll.connection", data: { connectionId: conn.id } });
+    }
+    if (jobs.length > 0) await inngest.send(jobs);
 
     revalidatePath("/integrations");
     return { ok: true, data: { connectionId: conn.id, notice } };
@@ -361,6 +372,7 @@ export async function syncConnection(connectionId: string): Promise<ActionResult
   const events: { name: string; data: Record<string, string> }[] = [
     { name: "ingest/reprocess.requested", data: { connectionId: conn.id } },
   ];
+  if (connector.backfill) events.push({ name: "ingest/backfill.requested", data: { connectionId: conn.id } });
   if (connector.poll && !(connector.registerWebhook && conn.externalWebhookId)) {
     events.push({ name: "ingest/poll.connection", data: { connectionId: conn.id } });
   }

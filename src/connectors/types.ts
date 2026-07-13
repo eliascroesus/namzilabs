@@ -79,6 +79,13 @@ export interface Connector {
     config: Config,
     cursor: Cursor,
   ): Promise<{ records: RawRecord[]; nextCursor: Cursor }>;
+  /**
+   * Pull HISTORICAL records on connect (and on demand) so a new connection
+   * isn't empty until the next webhook fires. Returns raw records in the same
+   * shape normalize() expects; ingestion is idempotent so re-running is safe.
+   * Polling connectors (Sheets, Instantly) backfill via their cursor instead.
+   */
+  backfill?(auth: AuthData, config: Config): Promise<RawRecord[]>;
 
   // -- Normalization (pure; unit-tested against captured payloads) -----------
   /** Return [] to skip an event type we don't track. */

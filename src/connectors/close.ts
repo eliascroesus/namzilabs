@@ -60,6 +60,26 @@ export const closeConnector: Connector = {
     return res?.data ?? [];
   },
 
+  async backfill(auth) {
+    // Event Log retains ~30 days. Paginate real event-log pages; each item is
+    // the event object directly, so wrap it as { event } to match normalize().
+    const out: RawRecord[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 20; page++) {
+      const qs = new URLSearchParams({ _limit: "100" });
+      if (cursor) qs.set("_cursor", cursor);
+      const res = await apiFetch<{ data?: RawRecord[]; cursor_next?: string | null }>(
+        `${BASE}/event/?${qs.toString()}`,
+        { headers: authHeaders(auth) },
+      );
+      const items = res?.data ?? [];
+      for (const item of items) out.push({ event: item });
+      cursor = res?.cursor_next ?? undefined;
+      if (!cursor || items.length === 0) break;
+    }
+    return out;
+  },
+
   async registerWebhook(auth, _config, callbackUrl) {
     const res = await apiFetch<{ id: string; signature_key: string }>(`${BASE}/webhook/`, {
       method: "POST",

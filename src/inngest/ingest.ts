@@ -171,4 +171,62 @@ export const pollConnectionFn = inngest.createFunction(
   },
 );
 
-export const ingestFunctions = [processRawEventFn, reprocessFailedFn, pollCronFn, pollConnectionFn];
+/**
+ * One-shot historical import: pull all past records from the provider's API
+ * and feed them through the same idempotent processor. Fired on connect and
+ * whenever the user hits "Import history". Safe to re-run (upsert dedupes).
+ */
+export const backfillConnectionFn = inngest.createFunction(
+  {
+    id: "ingest-backfill-connection",
+    retries: 2,
+    concurrency: [{ limit: 3 }],
+    triggers: [{ event: "ingest/backfill.requested" }],
+    onFailure: async ({ event, error }) => {
+      const { connectionId } = event.data.event.data as { connectionId: string };
+      await db()
+        .update(schema.connections)
+        .set({ errorMessage: `History import issue: ${error.message.slice(0, 300)}` })
+        .where(eq(schema.connections.id, connectionId));
+    },
+  },
+  async ({ event, step }) => {
+    const { connectionId } = event.data as { connectionId: string };
+
+    const rawIds = await step.run("fetch-history", async () => {
+      const [conn] = await db()
+        .select()
+        .from(schema.connections)
+        .where(eq(schema.connections.id, connectionId));
+      if (!conn || conn.status === "deleted") return [] as string[];
+      const connector = getConnector(conn.provider);
+      if (!connector.backfill || !conn.authData) return [] as string[];
+
+      const { getFreshAuth } = await import("@/lib/connection-auth");
+      const auth = await getFreshAuth(conn);
+      const records = await connector.backfill(auth, conn.config);
+      return insertRawEvents(conn.id, records);
+    });
+
+    // Chunk the fan-out so a big history doesn't exceed one event batch.
+    for (let i = 0; i < rawIds.length; i += 200) {
+      const chunk = rawIds.slice(i, i + 200);
+      await step.sendEvent(
+        `process-${i}`,
+        chunk.map((rawEventId) => ({
+          name: "ingest/raw_event.received" as const,
+          data: { rawEventId, connectionId },
+        })),
+      );
+    }
+    return { imported: rawIds.length };
+  },
+);
+
+export const ingestFunctions = [
+  processRawEventFn,
+  reprocessFailedFn,
+  pollCronFn,
+  pollConnectionFn,
+  backfillConnectionFn,
+];

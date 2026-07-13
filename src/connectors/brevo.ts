@@ -62,6 +62,20 @@ export const brevoConnector: Connector = {
     }
   },
 
+  async backfill(auth) {
+    // Historical transactional events (real endpoint, most-recent first).
+    // Same object shape as webhook events, so normalize() handles them.
+    try {
+      const res = await apiFetch<{ events?: RawRecord[] }>(
+        `${BASE}/smtp/statistics/events?limit=2500&sort=desc`,
+        { headers: authHeaders(auth) },
+      );
+      return res?.events ?? [];
+    } catch {
+      return [];
+    }
+  },
+
   async registerWebhook(auth, _config, callbackUrl) {
     const res = await apiFetch<{ id: number }>(`${BASE}/webhooks`, {
       method: "POST",
